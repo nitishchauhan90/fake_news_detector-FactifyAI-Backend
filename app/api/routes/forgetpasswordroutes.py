@@ -1,75 +1,101 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Request ,Response
 from fastapi.responses import RedirectResponse, HTMLResponse
 from app.api.core.database import get_user_collection
 from app.api.core.security import hash_password
-from app.utils.api_response import api_response
-from bson import ObjectId
-import uuid
-from datetime import datetime, timedelta
-import smtplib
-from email.mime.text import MIMEText
-
+from ..core.email import send_reset_email,generate_otp,save_otp,check_otp
+from ..schemas.password_schema import OTPRequestSchema,OTPVerifySchema,ResetPasswordSchema
+from ...utils.api_response import api_response
+from ..core.database import get_otp_collection
 router = APIRouter(prefix="/api/auth", tags=["forget Password"])
 
-# Simulated in-memory token store (Use Redis or DB in production)
-reset_tokens = {}
-
-SMTP_SERVER = "smtp.example.com"
-SMTP_PORT = 587
-SMTP_USERNAME = "your_email@example.com"
-SMTP_PASSWORD = "your_password"
-
-@router.post("/forgot-password")
-async def forgot_password(email: str = Form(...), users_collection=Depends(get_user_collection)):
-    user = users_collection.find_one({"email": email})
+@router.post("/forget-password")
+async def forget_password(
+    data: OTPRequestSchema,
+    response: Response,  # ✅ Add Response to set cookie
+    users_collection = Depends(get_user_collection),
+    otp_collection = Depends(get_otp_collection)
+):
+    user = users_collection.find_one({"email": data.email})
+    
     if not user:
-        raise HTTPException(status_code=404, detail="Email not registered")
-    token = str(uuid.uuid4())
-    reset_tokens[token] = {
-        "user_id": str(user["_id"]),
-        "expires": datetime.utcnow() + timedelta(minutes=15)
-    }
-    reset_link = f"http://localhost:8000/api/auth/reset-password?token={token}"
-    send_email(email, "Password Reset", f"Click this link to reset your password: {reset_link}")
-    return api_response("Password reset link sent to your email", 200)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
 
-@router.get("/reset-password")
-async def reset_password_form(token: str):
-    if token not in reset_tokens or reset_tokens[token]["expires"] < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
-    html_content = f"""
-    <html>
-    <body>
-        <form action="/api/auth/reset-password" method="post">
-            <input type="hidden" name="token" value="{token}" />
-            New Password: <input type="password" name="new_password" required /><br>
-            <button type="submit">Change Password</button>
-        </form>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
+    otp = generate_otp()
+    save_otp(data.email, otp, otp_collection)
+    send_reset_email(data.email, otp)
+
+    # ✅ Set the email in cookie for future OTP verification
+    response.set_cookie(
+        key="otp_email",
+        value=data.email,
+        max_age=600,  # cookie valid for 5 minutes
+        httponly=True,
+        samesite="Lax"
+    )
+
+    return api_response("OTP sent successfully", 200)
+
+# @router.post("/send-otp")
+# async def send_otp(
+#     payload: OTPRequestSchema,
+#     otp_collection = Depends(get_otp_collection)
+# ):
+#     otp = generate_otp()
+#     save_otp(payload.email, otp, otp_collection)
+
+#     print(f"OTP sent to {payload.email}: {otp}")  # Replace with real email logic
+#     return api_response("OTP sent successfully", 200)
+
+from fastapi import Request
+
+@router.post("/verify-otp")
+async def verify_otp(
+    request: Request,
+    payload: OTPVerifySchema,
+    otp_collection = Depends(get_otp_collection)
+):
+    # Don't use payload.email instead read from cookie
+    email = request.cookies.get("otp_email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Missing email in cookie")
+
+    if check_otp(email, payload.otp, otp_collection):
+        return api_response("OTP verified successfully", 200)
+
+    raise HTTPException(status_code=400, detail="Invalid or expired OTP")
 
 @router.post("/reset-password")
-async def reset_password(token: str = Form(...), new_password: str = Form(...), users_collection=Depends(get_user_collection)):
-    if token not in reset_tokens or reset_tokens[token]["expires"] < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
+async def reset_password(
+    payload: ResetPasswordSchema,
+    request: Request,
+    response: Response,
+    users_collection = Depends(get_user_collection),
+    otp_collection = Depends(get_otp_collection)
+):
+    email = request.cookies.get("otp_email")
+    
+    if not email:
+        raise HTTPException(status_code=400, detail="OTP session expired or missing.")
 
-    user_id = reset_tokens[token]["user_id"]
-    hashed_pw = hash_password(new_password)
-    users_collection.update_one({"_id": ObjectId(user_id)}, {"$set": {"hashed_password": hashed_pw}})
+    # Find user by email
+    user = users_collection.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    del reset_tokens[token]
-    return RedirectResponse(url="/login", status_code=303)
+    # Hash and update password
+    hashed = hash_password(payload.new_password)
+    users_collection.update_one(
+        {"email": email},
+        {"$set": {"hashed_password": hashed}}
+    )
 
+    # Delete OTP record
+    otp_collection.delete_one({"email": email})
 
-def send_email(to_email: str, subject: str, body: str):
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = SMTP_USERNAME
-    msg["To"] = to_email
+    # Delete otp_email cookie (expires immediately)
+    response.delete_cookie("otp_email")
 
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_USERNAME, SMTP_PASSWORD)
-        server.sendmail(SMTP_USERNAME, to_email, msg.as_string())
+    return api_response("Password reset successfully", 200)

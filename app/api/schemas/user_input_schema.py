@@ -1,5 +1,5 @@
 from typing import Literal , Optional, List
-from pydantic import BaseModel, HttpUrl ,Field ,model_validator
+from pydantic import BaseModel, HttpUrl ,Field ,root_validator
 from datetime import datetime
 
 class InputMetaData(BaseModel):
@@ -35,7 +35,7 @@ class UserInputData(BaseModel):
     user_id: str  # Link user ID
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    @model_validator(mode="after")
+    @root_validator
     def at_least_one_field_must_be_present(cls, values):
         text, url, image_filename, audio_filename = (
             values.get("text"),

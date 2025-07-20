@@ -11,9 +11,13 @@ def get_database():
 
 # Dependency function for injecting user collection
 def get_user_collection():
-    
+
     return db["user_collection"]
 
 def get_contact_collection():
     db = get_database()  # Your database client logic
     return db["contact_forms"]
+
+def get_otp_collection():
+    db = get_database()
+    return db["otp_collection"]
