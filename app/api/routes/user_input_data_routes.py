@@ -1,6 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request ,status
 from app.api.core.database import get_user_collection
 from app.api.core.oauth import get_current_user
+from typing import Optional
+from ..services.output_services import (
+    extract_text_from_audio,
+    extract_text_from_image,
+    extract_text_from_url,
+    analyze_sentiment,
+    check_authenticity,
+    google_fact_check,
+    generate_final_conclusion,
+    validate_file_extension
+)
 from app.api.schemas.user_input_schema import (
     URLInputData,
     TextInputData,
@@ -15,59 +26,61 @@ from app.utils.api_response import api_response
 from bson import ObjectId
 from datetime import datetime
 
-router = APIRouter(prefix="/api/user-input", tags=["User Input"])
+router = APIRouter(prefix="/api/auth", tags=["User Input"])
 
 
-@router.post("/submit")
-async def submit_user_input(
-    request: Request,
-    text: str = Form(None),
-    url: str = Form(None),
-    image: UploadFile = File(None),
-    audio: UploadFile = File(None),
-    user_id: str = Depends(get_current_user),
-    user_input_collection = Depends(get_user_collection)
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a"}
+
+@router.post("/analyze")
+async def analyze_input(
+    text: Optional[str] = Form(None),
+    url: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
+    audio: Optional[UploadFile] = File(None),
+    current_user = Depends(get_current_user),
 ):
-    input_data = {}
+    all_texts = []
+
     if text:
-        input_data["text"] = text
+        all_texts.append(text)
+
     if url:
-        input_data["url"] = url
+        url_text = extract_text_from_url(url)
+        all_texts.append(url_text)
+
     if image:
-        filename = f"uploads/images/{datetime.utcnow().isoformat()}_{image.filename}"
-        with open(filename, "wb") as f:
-            f.write(await image.read())
-        input_data["image_filename"] = filename
+        validate_file_extension(image, ALLOWED_IMAGE_EXTENSIONS, "image")
+        image_bytes = await image.read()
+        image_text = extract_text_from_image(image_bytes)
+        all_texts.append(image_text)
+
     if audio:
-        filename = f"uploads/audio/{datetime.utcnow().isoformat()}_{audio.filename}"
-        with open(filename, "wb") as f:
-            f.write(await audio.read())
-        input_data["audio_filename"] = filename
+        validate_file_extension(audio, ALLOWED_AUDIO_EXTENSIONS, "audio")
+        audio_bytes = await audio.read()
+        audio_text = extract_text_from_audio(audio_bytes)
+        all_texts.append(audio_text)
 
-    if not input_data:
-        raise HTTPException(status_code=422, detail="At least one input must be provided.")
+    if not all_texts:
+        raise HTTPException(status_code=400, detail="No input provided.")
 
-    input_data["user_id"] = user_id
-    input_data["created_at"] = datetime.utcnow()
+    combined_text = " ".join(all_texts)
 
-    result = user_input_collection.insert_one(input_data)
+    # Analysis logic
+    sentiment = analyze_sentiment(combined_text)
+    authenticity_score = check_authenticity(combined_text)
+    fact_check_result = google_fact_check(combined_text)
 
-    return api_response(
-        message="User input submitted successfully",
-        status=201,
-        data={"input_id": str(result.inserted_id)}
+    conclusion = generate_final_conclusion(
+        sentiment=sentiment,
+        authenticity_score=authenticity_score,
+        fact_check=fact_check_result
     )
 
-@router.get("/all")
-async def get_all_user_inputs(
-    user_id: str = Depends(get_current_user),
-    user_input_collection = Depends(get_user_collection)
-):
-    inputs = list(user_input_collection.find({"user_id": user_id}))
-    for item in inputs:
-        item["_id"] = str(item["_id"])
-    return api_response(
-        message="User input list fetched successfully",
-        status=200,
-        data=inputs
-    )
+    return {
+        "message": "Analysis completed",
+        "sentiment": sentiment,
+        "authenticity_score": authenticity_score,
+        "fact_check_result": fact_check_result,
+        "final_conclusion": conclusion
+    }
