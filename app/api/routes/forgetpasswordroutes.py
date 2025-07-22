@@ -18,10 +18,7 @@ async def forget_password(
     user = users_collection.find_one({"email": data.email})
     
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        return api_response("User not found",404)
 
     otp = generate_otp()
     save_otp(data.email, otp, otp_collection)
@@ -60,12 +57,12 @@ async def verify_otp(
     # Don't use payload.email instead read from cookie
     email = request.cookies.get("otp_email")
     if not email:
-        raise HTTPException(status_code=400, detail="Missing email in cookie")
+        return api_response("Missing email in cookie",400)
 
     if check_otp(email, payload.otp, otp_collection):
         return api_response("OTP verified successfully", 200)
 
-    raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+    return api_response("Invalid or expired OTP",400)
 
 @router.post("/reset-password")
 async def reset_password(
@@ -78,12 +75,12 @@ async def reset_password(
     email = request.cookies.get("otp_email")
     
     if not email:
-        raise HTTPException(status_code=400, detail="OTP session expired or missing.")
+        return api_response("OTP session expired or missing.",400)
 
     # Find user by email
     user = users_collection.find_one({"email": email})
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return api_response("User not found",404)
 
     # Hash and update password
     hashed = hash_password(payload.new_password)

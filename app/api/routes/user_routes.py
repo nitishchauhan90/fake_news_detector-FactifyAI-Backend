@@ -31,13 +31,15 @@ def sanitize_user(user):
 
 @router.post("/register", response_model=dict)
 async def register_user(user_data: UserCreate, users_collection=Depends(get_user_collection)):
+    if users_collection.find_one({"username": user_data.username}):
+        return api_response("Username already taken",400)
     if users_collection.find_one({"email": user_data.email}):
-        raise HTTPException(status_code=400, detail="Email already registered")
+        return api_response("Email already registered",400)
     hashed_pw = hash_password(user_data.password)
     user_dict = user_data.dict()
     user_dict.pop("password")
     user_dict["hashed_password"] = hashed_pw
-    user_dict["is_active"] = True
+    # user_dict["is_active"] = True
     user_dict["created_at"] = datetime.datetime.utcnow()
     result = users_collection.insert_one(user_dict)
     user_dict["_id"] = result.inserted_id
@@ -51,8 +53,9 @@ async def login_user(
     users_collection=Depends(get_user_collection)
 ):
     user = users_collection.find_one({"email": form_data.username})
+    
     if not user or not verify_password(form_data.password, user.get("hashed_password")):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        return api_response("Invalid credentials",401)
     token = create_access_token({"sub": str(user["_id"])})
     response.set_cookie(
         key="clarifyai_token",
@@ -74,7 +77,7 @@ async def update_user_fields(
         {"_id": ObjectId(user_id)},
         {"$set": update_fields}
     )
-    user = await users_collection.find_one({"_id": ObjectId(user_id)})
+    user =  users_collection.find_one({"_id": ObjectId(user_id)})
     return api_response("User updated", 200, sanitize_user(user))
 
 @router.put("/update-password", response_model=dict)
@@ -86,9 +89,9 @@ async def update_user_password(
     user_id = current_user.get("sub")
     user = users_collection.find_one({"_id": ObjectId(user_id)})
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return api_response("User not found" , 404)
     if not verify_password(password_data.old_password, user.get("hashed_password")):
-        raise HTTPException(status_code=401, detail="Old password is incorrect")
+        return api_response("Old password is incorrect",401)
     new_hashed = hash_password(password_data.new_password)
     users_collection.update_one(
         {"_id": ObjectId(user_id)},
@@ -101,14 +104,14 @@ async def delete_user_account(current_user=Depends(get_current_user), users_coll
     user_id = current_user.get("sub")
     result = users_collection.delete_one({"_id": ObjectId(user_id)})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
+        return api_response("User not found",404)
     return api_response("User account deleted successfully", 200)
 
 @router.get("/{user_id}", response_model=dict)
 async def get_user_by_id(user_id: str, users_collection=Depends(get_user_collection)):
     if not ObjectId.is_valid(user_id):
-        raise HTTPException(status_code=400, detail="Invalid user ID format")
+        return api_response("Invalid user ID format",400)
     user = users_collection.find_one({"_id": ObjectId(user_id)})
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return api_response("User not found",404)
     return api_response("User fetched", 200, sanitize_user(user))

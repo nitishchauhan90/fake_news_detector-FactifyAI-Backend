@@ -6,6 +6,7 @@ from ..core.database import get_user_collection
 from ..core.security import create_access_token
 from ..core.oauth import oauth
 from datetime import datetime
+from ..config.config import FRONTEND_URL
 router = APIRouter(prefix="/api/auth", tags=["Google auth"])
 
 @router.post("/logout")
@@ -23,7 +24,7 @@ async def login_via_google(request: Request):
         # print(f"Redirect URI: {redirect_uri} | Type: {type(redirect_uri)}")
         return await oauth.google.authorize_redirect(request, redirect_uri)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Google Login failed: {str(e)}")
+        return api_response(f"Google Login failed: {str(e)}",500)
 
 
 @router.get("/google/callback", name="google_auth_callback")
@@ -39,7 +40,7 @@ async def google_auth_callback(
         email = user_info.get("email")
 
         if not email:
-            raise HTTPException(status_code=400, detail="Email not found from Google account")
+            return api_response("Email not found from Google account",400)
 
         # 2. Check if user exists in DB
         user = users_collection.find_one({"email": email})
@@ -50,7 +51,7 @@ async def google_auth_callback(
                 "email":email,
                 "username":email.split("@")[0],  # Default username
                 "hashed_password":"",            # No password for Google OAuth
-                "is_active":True,
+                # "is_active":True,
                 "created_at":datetime.utcnow(),
                 "oauth_provider":"google"
             }
@@ -64,7 +65,7 @@ async def google_auth_callback(
         jwt_token = create_access_token({"sub": user_id})
 
         # 5. Set token in cookie and redirect
-        frontend_redirect_url = "http://localhost:3000"  # or your dashboard URL
+        frontend_redirect_url = FRONTEND_URL  # or your dashboard URL
         redirect_response = RedirectResponse(url=frontend_redirect_url)
         redirect_response.set_cookie(
             key="clarifyai_token",
@@ -76,4 +77,4 @@ async def google_auth_callback(
 
         return redirect_response
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Google OAuth failed: {str(e)}")
+        return api_response(f"Google OAuth failed: {str(e)}",400)

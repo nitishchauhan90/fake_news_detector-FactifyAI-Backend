@@ -17,7 +17,7 @@ async def get_my_profile(current_user=Depends(get_current_user), users_collectio
     # print("Decoded token payload:", current_user)
     user = users_collection.find_one({"_id": ObjectId(user_id)})
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return api_response("User not found",404)
     # if not isinstance(user_id, str) or not ObjectId.is_valid(user_id):
     #     raise HTTPException(status_code=400, detail="Invalid user ID format")
     return api_response("Profile fetched", 200, sanitize_user(user))

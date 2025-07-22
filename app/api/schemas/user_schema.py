@@ -11,7 +11,7 @@ class UserCreate(UserBase):
 
 class UserInDB(UserBase):
     hashed_password: str
-    is_active: bool = True
+    # is_active: bool = True
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
     oauth_provider: Optional[str] = None
 

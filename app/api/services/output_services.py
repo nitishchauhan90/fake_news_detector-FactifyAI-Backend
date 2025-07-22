@@ -6,8 +6,9 @@ import requests
 from urllib.parse import quote
 import torch
 from transformers import pipeline
-
-CLAIMBUSTER_API_KEY = "8a3450501f4d4eaaa386ce6d08ca7ba3"
+from ..config.config import CLAIMBUSTER_API_KEY
+from ...utils.api_response import api_response
+from textblob import TextBlob
 
 classifier = pipeline(
     "sentiment-analysis",
@@ -71,19 +72,60 @@ def analyze_sentiment(text: str) -> str:
     label = res['label']
     score = res['score']
     
-    # ✅ Neutral fallback if confidence is low (< 0.6)
+    # Neutral fallback if confidence is low (< 0.6)
     if score < 0.6:
         return "NEUTRAL"
     
-    # ✅ Otherwise return POSITIVE/NEGATIVE
+    # Otherwise return POSITIVE/NEGATIVE
     return f"{label} (confidence: {round(score, 4)})"
 
 # def check_authenticity(text: str) -> float:
 #     # Placeholder for ML model or heuristic
 #     return 76.3  # percentage
+# def calculate_bias_score(text: str) -> float:
+#     blob = TextBlob(text)
+    
+#     subjectivity = blob.sentiment.subjectivity  
+    
+    
+#     polarity = abs(blob.sentiment.polarity)
+    
+#     # Bias score = combine subjectivity + emotional polarity
+#     bias_score = (subjectivity * 0.7) + (polarity * 0.3)
+    
+#     # return round(bias_score, 2)
+#     return bias_score
+
+def calculate_bias_score(text: str) -> dict:
+    blob = TextBlob(text)
+    
+    # Subjectivity: 0 = very objective, 1 = very subjective
+    subjectivity = blob.sentiment.subjectivity  
+    
+    # Polarity: -1 (negative) → 1 (positive)
+    polarity = abs(blob.sentiment.polarity)
+    
+    # Bias score = combine subjectivity (70%) + polarity (30%)
+    score = round((subjectivity * 0.7) + (polarity * 0.3), 2)
+    
+    # Categorize bias level
+    if score < 0.3:
+        level = "Low (Mostly Neutral)"
+    elif score < 0.6:
+        level = "Moderate Bias"
+    else:
+        level = "High (Strongly Biased)"
+    
+    # Return as JSON-like dict
+    return {
+        "bias_score": score,
+        "bias_level": level
+    }
+
+
 
 def  check_authenticity(claim: str) -> dict:
-    encoded_claim = quote(claim)  # ✅ Proper URL encoding
+    encoded_claim = quote(claim)  # Proper URL encoding
     endpoint = f"https://idir.uta.edu/claimbuster/api/v2/score/text/{encoded_claim}"
     headers = {"x-api-key": CLAIMBUSTER_API_KEY}
 
@@ -94,7 +136,7 @@ def  check_authenticity(claim: str) -> dict:
         # print(data)
         score = data.get("results", [{}])[0].get("score")
         if score is None:
-            raise HTTPException(status_code=502, detail="Score not found in ClaimBuster response.")
+            return api_response("Score not found in ClaimBuster response.",502)
 
         score = round(score, 2)
 
@@ -114,7 +156,7 @@ def  check_authenticity(claim: str) -> dict:
         }
 
     except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"ClaimBuster API error: {str(e)}")
+        return api_response(f"ClaimBuster API error: {str(e)}",502)
 
 
 def google_fact_check(text: str, api_key: str) -> dict:
@@ -128,8 +170,8 @@ def google_fact_check(text: str, api_key: str) -> dict:
         response = requests.get(url, params=params)
         response.raise_for_status()
         data = response.json()
-        print(data)
-        # ✅ Return only the first claim if available
+        # print(data)
+        # Return only the first claim if available
         if "claims" in data and data["claims"]:
             item = data["claims"][0]
             review = item.get("claimReview", [])[0] if item.get("claimReview") else {}
@@ -150,7 +192,7 @@ def google_fact_check(text: str, api_key: str) -> dict:
             }
 
     except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"External API error: {str(e)}")
+        return api_response(f"External API error: {str(e)}",502)
 
 def generate_final_conclusion(sentiment: str, authenticity_score: float, fact_check: str) -> str:
     if authenticity_score >= 80 and sentiment != "negative" and "true" in fact_check.lower():
@@ -163,7 +205,7 @@ def generate_final_conclusion(sentiment: str, authenticity_score: float, fact_ch
 def validate_file_extension(file: UploadFile, allowed_exts: set, file_type: str):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in allowed_exts:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid {file_type} file type. Allowed: {', '.join(allowed_exts)}"
+        return api_response(
+            f"Invalid {file_type} file type. Allowed: {', '.join(allowed_exts)}",
+            400
         )

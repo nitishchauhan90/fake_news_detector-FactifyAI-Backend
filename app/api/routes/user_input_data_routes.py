@@ -10,7 +10,8 @@ from ..services.output_services import (
     check_authenticity,
     google_fact_check,
     generate_final_conclusion,
-    validate_file_extension
+    validate_file_extension,
+    calculate_bias_score
 )
 from app.api.schemas.user_input_schema import (
     URLInputData,
@@ -25,13 +26,13 @@ from app.api.schemas.user_input_schema import (
 from app.utils.api_response import api_response
 from bson import ObjectId
 from datetime import datetime
-
+from ..config.config import GOOGLE_FACT_CHECK_API_KEY
 router = APIRouter(prefix="/api/auth", tags=["User Input"])
 
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a"}
-GOOGLE_FACT_CHECK_API_KEY = "AIzaSyBUSjy65k7q6cVUqyn4oMO0Z_3UAMLZSDk"
+
 @router.post("/analyze")
 async def analyze_input(
     text: Optional[str] = Form(None),
@@ -62,7 +63,7 @@ async def analyze_input(
         all_texts.append(audio_text)
 
     if not all_texts:
-        raise HTTPException(status_code=400, detail="No input provided.")
+        return api_response("No input provided.",400)
 
     combined_text = " ".join(all_texts)
     # print(combined_text)
@@ -70,17 +71,20 @@ async def analyze_input(
     sentiment = analyze_sentiment(combined_text)
     authenticity_score = check_authenticity(combined_text)
     fact_check_result = google_fact_check(combined_text,GOOGLE_FACT_CHECK_API_KEY)
+    bias_score = calculate_bias_score(combined_text)
 
-    conclusion = generate_final_conclusion(
-        sentiment=sentiment,
-        authenticity_score=authenticity_score,
-        fact_check=fact_check_result
-    )
+    # conclusion = generate_final_conclusion(
+    #     sentiment=sentiment,
+    #     authenticity_score=authenticity_score,
+    #     fact_check=fact_check_result,
+    #     bias_score=bias_score
+    # )
 
     return {
         "message": "Analysis completed",
         "sentiment": sentiment,
         "authenticity_score": authenticity_score,
         "fact_check_result": fact_check_result,
+        "bias_score": bias_score
         # "final_conclusion": conclusion
     }
