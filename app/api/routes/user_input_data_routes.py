@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api/auth", tags=["User Input"])
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".m4a"}
-
+GOOGLE_FACT_CHECK_API_KEY = "AIzaSyBUSjy65k7q6cVUqyn4oMO0Z_3UAMLZSDk"
 @router.post("/analyze")
 async def analyze_input(
     text: Optional[str] = Form(None),
@@ -65,11 +65,11 @@ async def analyze_input(
         raise HTTPException(status_code=400, detail="No input provided.")
 
     combined_text = " ".join(all_texts)
-
+    # print(combined_text)
     # Analysis logic
     sentiment = analyze_sentiment(combined_text)
     authenticity_score = check_authenticity(combined_text)
-    fact_check_result = google_fact_check(combined_text)
+    fact_check_result = google_fact_check(combined_text,GOOGLE_FACT_CHECK_API_KEY)
 
     conclusion = generate_final_conclusion(
         sentiment=sentiment,
@@ -82,5 +82,5 @@ async def analyze_input(
         "sentiment": sentiment,
         "authenticity_score": authenticity_score,
         "fact_check_result": fact_check_result,
-        "final_conclusion": conclusion
+        # "final_conclusion": conclusion
     }
