@@ -3,6 +3,8 @@ from .api.routes import user_routes,profile_routes,user_input_data_routes,forget
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from .api.config.config import SESSION_SECRET_KEY
+import uvicorn
+import os
 app = FastAPI()
 
 app.add_middleware(
@@ -29,11 +31,7 @@ app.include_router(auth_routes.router)
 def checkMain():
     return("server chalu hai")
 
-# import uvicorn
-# if __name__ = "__main_":
-#   uvicorn.run(
-#       app="app.main:app",
-#       host="localhost"
-#       port=8000, 
-#       reload=True
-#   )
+
+if __name__ == "__main_":
+    port = int(os.environ.get("PORT",8000))
+    uvicorn.run("app.main:app",host="0.0.0.0",port=port)
