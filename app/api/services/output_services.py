@@ -9,6 +9,11 @@ from transformers import pipeline
 from ..config.config import CLAIMBUSTER_API_KEY
 from ...utils.api_response import api_response
 from textblob import TextBlob
+import pytesseract
+from PIL import Image
+import io
+import requests
+from bs4 import BeautifulSoup
 
 classifier = pipeline(
     "sentiment-analysis",
@@ -17,47 +22,80 @@ classifier = pipeline(
 )
 
 
+# def extract_text_from_url(url: str) -> str:
+#     list_of_urls = url
+#     summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+
+#     MAX_INPUT_WORDS = 800   # Take a bit more input text
+#     SUMMARY_MIN = 50        # slightly higher min length
+#     SUMMARY_MAX = 300       # allow longer summary
+
+#     for url in list_of_urls:
+#         # Download & parse
+#         article = newspaper.Article(url, language='en')
+#         article.download()
+#         article.parse()
+        
+#         # Get the full text
+#         full_text = article.text.strip()
+#         words = full_text.split()
+        
+#         # Only take first N words (to keep it short & fast)
+#         short_text = " ".join(words[:MAX_INPUT_WORDS])
+        
+#         # print(f" Original text length: {len(words)} words")
+#         # print(f" Using only: {len(short_text.split())} words for summarization")
+        
+#         # Summarize with longer output
+#         summary = summarizer(
+#             short_text,
+#             max_length=SUMMARY_MAX,   # slightly longer summary
+#             min_length=SUMMARY_MIN,   # ensures it's not too short
+#             do_sample=False
+#         )[0]['summary_text']
+
+#     return summary
+
 def extract_text_from_url(url: str) -> str:
-    list_of_urls = url
     summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
-    MAX_INPUT_WORDS = 800   # Take a bit more input text
-    SUMMARY_MIN = 50        # slightly higher min length
-    SUMMARY_MAX = 300       # allow longer summary
+    MAX_INPUT_WORDS = 800   # Limit text to avoid very long inputs
+    SUMMARY_MIN = 50        # Min length of summary
+    SUMMARY_MAX = 300       # Max length of summary
 
-    for url in list_of_urls:
-        # Download & parse
-        article = newspaper.Article(url, language='en')
-        article.download()
-        article.parse()
-        
-        # Get the full text
-        full_text = article.text.strip()
-        words = full_text.split()
-        
-        # Only take first N words (to keep it short & fast)
-        short_text = " ".join(words[:MAX_INPUT_WORDS])
-        
-        # print(f" Original text length: {len(words)} words")
-        # print(f" Using only: {len(short_text.split())} words for summarization")
-        
-        # Summarize with longer output
-        summary = summarizer(
-            short_text,
-            max_length=SUMMARY_MAX,   # slightly longer summary
-            min_length=SUMMARY_MIN,   # ensures it's not too short
-            do_sample=False
-        )[0]['summary_text']
+    # Fetch page HTML
+    response = requests.get(url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # Extract text from all <p> tags
+    paragraphs = [p.get_text() for p in soup.find_all("p")]
+    full_text = " ".join(paragraphs).strip()
+
+    # Limit to first N words for summarization
+    words = full_text.split()
+    short_text = " ".join(words[:MAX_INPUT_WORDS])
+
+    # Summarize
+    summary = summarizer(
+        short_text,
+        max_length=SUMMARY_MAX,
+        min_length=SUMMARY_MIN,
+        do_sample=False
+    )[0]['summary_text']
 
     return summary
 
 
 def extract_text_from_image(image_bytes: bytes) -> str:
-    import pytesseract
-    from PIL import Image
-    import io
+    # Open image from bytes
     image = Image.open(io.BytesIO(image_bytes))
-    return pytesseract.image_to_string(image)
+    # Extract raw text using Tesseract
+    raw_text = pytesseract.image_to_string(image)
+    # Clean the text: remove newlines, tabs, and extra spaces
+    cleaned_text = " ".join(raw_text.split())
+
+    return cleaned_text.strip()
 
 def extract_text_from_audio(audio_bytes: bytes) -> str:
     import speech_recognition as sr
@@ -72,12 +110,35 @@ def analyze_sentiment(text: str) -> str:
     label = res['label']
     score = res['score']
     
-    # Neutral fallback if confidence is low (< 0.6)
+   
     if score < 0.6:
         return "NEUTRAL"
     
-    # Otherwise return POSITIVE/NEGATIVE
-    return f"{label} (confidence: {round(score, 4)})"
+    data = {
+        "label_data":label,
+        "score" : score
+    }
+    
+    # return f"{label} (confidence: {round(score, 4)})"
+    return data
+
+def overall_score(bias_score, authenticity_score, sentiment_score, weights=None):
+    if not weights:
+        # Simple average
+        overall = (bias_score + authenticity_score + sentiment_score) / 3
+    else:
+        # Weighted average
+        total_weight = sum(weights.values())
+        overall = (
+            (bias_score * weights.get('bias', 1)) +
+            (authenticity_score * weights.get('authenticity', 1)) +
+            (sentiment_score * weights.get('sentiment', 1))
+        ) / total_weight
+    
+    return round(overall, 2)
+
+
+
 
 # def check_authenticity(text: str) -> float:
 #     # Placeholder for ML model or heuristic
@@ -194,13 +255,13 @@ def google_fact_check(text: str, api_key: str) -> dict:
     except requests.exceptions.RequestException as e:
         return api_response(f"External API error: {str(e)}",502)
 
-def generate_final_conclusion(sentiment: str, authenticity_score: float, fact_check: str) -> str:
-    if authenticity_score >= 80 and sentiment != "negative" and "true" in fact_check.lower():
-        return "This content appears to be mostly REAL"
-    elif authenticity_score < 50:
-        return "This content is likely FAKE"
-    else:
-        return "This content might be PARTIALLY TRUE"
+# def generate_final_conclusion(sentiment: str, authenticity_score: float, fact_check: str) -> str:
+#     if authenticity_score >= 80 and sentiment != "negative" and "true" in fact_check.lower():
+#         return "This content appears to be mostly REAL"
+#     elif authenticity_score < 50:
+#         return "This content is likely FAKE"
+#     else:
+#         return "This content might be PARTIALLY TRUE"
     
 def validate_file_extension(file: UploadFile, allowed_exts: set, file_type: str):
     ext = os.path.splitext(file.filename)[1].lower()

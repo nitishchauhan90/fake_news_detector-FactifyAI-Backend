@@ -9,9 +9,10 @@ from ..services.output_services import (
     analyze_sentiment,
     check_authenticity,
     google_fact_check,
-    generate_final_conclusion,
+    # generate_final_conclusion,
     validate_file_extension,
-    calculate_bias_score
+    calculate_bias_score,
+    overall_score
 )
 from app.api.schemas.user_input_schema import (
     URLInputData,
@@ -69,22 +70,35 @@ async def analyze_input(
     # print(combined_text)
     # Analysis logic
     sentiment = analyze_sentiment(combined_text)
-    authenticity_score = check_authenticity(combined_text)
+    authenticity = check_authenticity(combined_text)
     fact_check_result = google_fact_check(combined_text,GOOGLE_FACT_CHECK_API_KEY)
-    bias_score = calculate_bias_score(combined_text)
+    bias = calculate_bias_score(combined_text)
 
+    
+
+    authenticity_score = authenticity["score"]
+    authenticity_data = round(authenticity_score,4)*100
+    sentiment_score = sentiment["score"]
+    sentiment_data  = round(sentiment_score, 4)*100
+    bias_score = bias["bias_score"]
+    bias_data = round(bias_score, 4)*100
+    overall_score_percentage = overall_score(bias_data, authenticity_data, sentiment_data)
     # conclusion = generate_final_conclusion(
     #     sentiment=sentiment,
     #     authenticity_score=authenticity_score,
     #     fact_check=fact_check_result,
     #     bias_score=bias_score
     # )
+    weights = {'bias': 0.3, 'authenticity': 0.5, 'sentiment': 0.2}
+    overall_weighted_score_percentage = overall_score(bias_data, authenticity_data, sentiment_data,weights)
 
     return {
         "message": "Analysis completed",
         "sentiment": sentiment,
-        "authenticity_score": authenticity_score,
+        "authenticity": authenticity,
         "fact_check_result": fact_check_result,
-        "bias_score": bias_score
+        "bias_score": bias,
+        "overall_score": overall_score_percentage,
+        "overall_weighted_score": overall_weighted_score_percentage
         # "final_conclusion": conclusion
     }

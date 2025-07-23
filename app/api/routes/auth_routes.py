@@ -65,7 +65,7 @@ async def google_auth_callback(
         jwt_token = create_access_token({"sub": user_id})
 
         # 5. Set token in cookie and redirect
-        frontend_redirect_url = FRONTEND_URL  # or your dashboard URL
+        frontend_redirect_url = f"http://localhost:3000/login/callback?token={jwt_token}&user_id={user_id}"  # or your dashboard URL
         redirect_response = RedirectResponse(url=frontend_redirect_url)
         redirect_response.set_cookie(
             key="clarifyai_token",
@@ -75,6 +75,7 @@ async def google_auth_callback(
             samesite="lax"
         )
 
+        
         return redirect_response
     except Exception as e:
         return api_response(f"Google OAuth failed: {str(e)}",400)
