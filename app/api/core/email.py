@@ -8,15 +8,15 @@ from datetime import datetime , timedelta
 def generate_otp() -> str:
     return str(random.randint(1000, 9999))
 
-def send_reset_email(to_email,otp):
+def send_reset_email(to_email,otp,message):
     email_user = EMAIL_USERNAME
     email_pass = EMAIL_PASSWORD
 
     msg = EmailMessage()
-    msg["Subject"] = "Reset Your Password"
+    msg["Subject"] = message
     msg["From"] = email_user
     msg["To"] = to_email
-    msg.set_content(f"OTP to reset your password: {otp}")
+    msg.set_content(f"OTP to {message}: {otp}")
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(email_user, email_pass)

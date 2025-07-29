@@ -2,7 +2,7 @@ from fastapi import APIRouter, Response,Request,Depends,HTTPException
 from app.utils.api_response import api_response
 from authlib.integrations.starlette_client import OAuth
 from starlette.responses import RedirectResponse
-from ..core.database import get_user_collection
+from ..core.database import get_user_collection 
 from ..core.security import create_access_token
 from ..core.oauth import oauth
 from datetime import datetime

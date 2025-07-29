@@ -35,6 +35,7 @@ async def register_user(user_data: UserCreate, users_collection=Depends(get_user
         return api_response("Username already taken",400)
     if users_collection.find_one({"email": user_data.email}):
         return api_response("Email already registered",400)
+    
     hashed_pw = hash_password(user_data.password)
     user_dict = user_data.dict()
     user_dict.pop("password")
@@ -53,6 +54,9 @@ async def login_user(
     users_collection=Depends(get_user_collection)
 ):
     user = users_collection.find_one({"email": form_data.username})
+    # print("Input password:", form_data.password)
+    # print("Stored hash:", user.get("hashed_password"))
+    # print("Verified:", verify_password(form_data.password, user.get("hashed_password")))
     
     if not user or not verify_password(form_data.password, user.get("hashed_password")):
         return api_response("Invalid credentials",401)
@@ -61,7 +65,7 @@ async def login_user(
         key="clarifyai_token",
         value=token,
         httponly=True,
-        max_age=1800
+        max_age=86400
     )
     return api_response("Login successful", 200, {"access_token": token, "token_type": "bearer"})
 

@@ -9,7 +9,7 @@ from ..services.output_services import (
     analyze_sentiment,
     check_authenticity,
     google_fact_check,
-    # generate_final_conclusion,
+    generate_final_conclusion,
     validate_file_extension,
     calculate_bias_score,
     overall_score
@@ -83,12 +83,12 @@ async def analyze_input(
     bias_score = bias["bias_score"]
     bias_data = round(bias_score, 4)*100
     overall_score_percentage = overall_score(bias_data, authenticity_data, sentiment_data)
-    # conclusion = generate_final_conclusion(
-    #     sentiment=sentiment,
-    #     authenticity_score=authenticity_score,
-    #     fact_check=fact_check_result,
-    #     bias_score=bias_score
-    # )
+    conclusion = generate_final_conclusion(
+        sentiment=sentiment["label_data"],
+        authenticity_score=authenticity_data,
+        fact_check=fact_check_result['rating'],
+        bias_score=bias_data
+    )
     weights = {'bias': 0.3, 'authenticity': 0.5, 'sentiment': 0.2}
     overall_weighted_score_percentage = overall_score(bias_data, authenticity_data, sentiment_data,weights)
 
@@ -99,6 +99,6 @@ async def analyze_input(
         "fact_check_result": fact_check_result,
         "bias_score": bias,
         "overall_score": overall_score_percentage,
-        "overall_weighted_score": overall_weighted_score_percentage
-        # "final_conclusion": conclusion
+        "overall_weighted_score": overall_weighted_score_percentage,
+        "final_conclusion": conclusion
     }

@@ -22,39 +22,7 @@ classifier = pipeline(
 )
 
 
-# def extract_text_from_url(url: str) -> str:
-#     list_of_urls = url
-#     summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
-#     MAX_INPUT_WORDS = 800   # Take a bit more input text
-#     SUMMARY_MIN = 50        # slightly higher min length
-#     SUMMARY_MAX = 300       # allow longer summary
-
-#     for url in list_of_urls:
-#         # Download & parse
-#         article = newspaper.Article(url, language='en')
-#         article.download()
-#         article.parse()
-        
-#         # Get the full text
-#         full_text = article.text.strip()
-#         words = full_text.split()
-        
-#         # Only take first N words (to keep it short & fast)
-#         short_text = " ".join(words[:MAX_INPUT_WORDS])
-        
-#         # print(f" Original text length: {len(words)} words")
-#         # print(f" Using only: {len(short_text.split())} words for summarization")
-        
-#         # Summarize with longer output
-#         summary = summarizer(
-#             short_text,
-#             max_length=SUMMARY_MAX,   # slightly longer summary
-#             min_length=SUMMARY_MIN,   # ensures it's not too short
-#             do_sample=False
-#         )[0]['summary_text']
-
-#     return summary
 
 def extract_text_from_url(url: str) -> str:
     summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
@@ -138,38 +106,18 @@ def overall_score(bias_score, authenticity_score, sentiment_score, weights=None)
     return round(overall, 2)
 
 
-
-
-# def check_authenticity(text: str) -> float:
-#     # Placeholder for ML model or heuristic
-#     return 76.3  # percentage
-# def calculate_bias_score(text: str) -> float:
-#     blob = TextBlob(text)
-    
-#     subjectivity = blob.sentiment.subjectivity  
-    
-    
-#     polarity = abs(blob.sentiment.polarity)
-    
-#     # Bias score = combine subjectivity + emotional polarity
-#     bias_score = (subjectivity * 0.7) + (polarity * 0.3)
-    
-#     # return round(bias_score, 2)
-#     return bias_score
-
 def calculate_bias_score(text: str) -> dict:
     blob = TextBlob(text)
     
-    # Subjectivity: 0 = very objective, 1 = very subjective
+    
     subjectivity = blob.sentiment.subjectivity  
     
-    # Polarity: -1 (negative) → 1 (positive)
+    
     polarity = abs(blob.sentiment.polarity)
     
-    # Bias score = combine subjectivity (70%) + polarity (30%)
     score = round((subjectivity * 0.7) + (polarity * 0.3), 2)
     
-    # Categorize bias level
+    
     if score < 0.3:
         level = "Low (Mostly Neutral)"
     elif score < 0.6:
@@ -177,13 +125,10 @@ def calculate_bias_score(text: str) -> dict:
     else:
         level = "High (Strongly Biased)"
     
-    # Return as JSON-like dict
     return {
         "bias_score": score,
         "bias_level": level
     }
-
-
 
 def  check_authenticity(claim: str) -> dict:
     encoded_claim = quote(claim)  # Proper URL encoding
@@ -219,7 +164,6 @@ def  check_authenticity(claim: str) -> dict:
     except requests.RequestException as e:
         return api_response(f"ClaimBuster API error: {str(e)}",502)
 
-
 def google_fact_check(text: str, api_key: str) -> dict:
     url = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
     params = {
@@ -231,7 +175,7 @@ def google_fact_check(text: str, api_key: str) -> dict:
         response = requests.get(url, params=params)
         response.raise_for_status()
         data = response.json()
-        # print(data)
+
         # Return only the first claim if available
         if "claims" in data and data["claims"]:
             item = data["claims"][0]
@@ -246,22 +190,26 @@ def google_fact_check(text: str, api_key: str) -> dict:
                 "publisher": review.get("publisher", {}).get("name", "N/A")
             }
         else:
+            # return api_response("No fact-checked claims found for the provided text.",404)
             return {
+                "rating":"No rating found",
                 "input_query": text,
                 "fact_checked_claims": [],
                 "message": "Google Fact Check API returned no results for the provided text."
             }
-
     except requests.exceptions.RequestException as e:
         return api_response(f"External API error: {str(e)}",502)
 
-# def generate_final_conclusion(sentiment: str, authenticity_score: float, fact_check: str) -> str:
-#     if authenticity_score >= 80 and sentiment != "negative" and "true" in fact_check.lower():
-#         return "This content appears to be mostly REAL"
-#     elif authenticity_score < 50:
-#         return "This content is likely FAKE"
-#     else:
-#         return "This content might be PARTIALLY TRUE"
+    
+def generate_final_conclusion(sentiment: str, authenticity_score: float, fact_check: str, bias_score: float) -> str:
+    if authenticity_score >= 80 and sentiment != "negative" and "true" in fact_check.lower() and bias_score < 40:
+        return "This content appears to be mostly REAL"
+    elif authenticity_score < 50 or "false" in fact_check.lower() or bias_score >= 70:
+        return "This content is likely FAKE"
+    elif 50 <= authenticity_score < 80 or (40 <= bias_score < 70):
+        return "This content might be PARTIALLY TRUE or BIASED"
+    else:
+        return "Unable to determine content authenticity accurately"
     
 def validate_file_extension(file: UploadFile, allowed_exts: set, file_type: str):
     ext = os.path.splitext(file.filename)[1].lower()

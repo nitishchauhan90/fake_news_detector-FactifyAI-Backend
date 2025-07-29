@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/auth", tags=["forget Password"])
 @router.post("/forget-password")
 async def forget_password(
     data: OTPRequestSchema,
-    response: Response,  # ✅ Add Response to set cookie
+    response: Response,  #Add Response to set cookie
     users_collection = Depends(get_user_collection),
     otp_collection = Depends(get_otp_collection)
 ):
@@ -21,10 +21,11 @@ async def forget_password(
         return api_response("User not found",404)
 
     otp = generate_otp()
+    msg = "reset your password"
     save_otp(data.email, otp, otp_collection)
-    send_reset_email(data.email, otp)
+    send_reset_email(data.email, otp, msg)
 
-    # ✅ Set the email in cookie for future OTP verification
+    # Set the email in cookie for future OTP verification
     response.set_cookie(
         key="otp_email",
         value=data.email,
@@ -35,18 +36,6 @@ async def forget_password(
 
     return api_response("OTP sent successfully", 200)
 
-# @router.post("/send-otp")
-# async def send_otp(
-#     payload: OTPRequestSchema,
-#     otp_collection = Depends(get_otp_collection)
-# ):
-#     otp = generate_otp()
-#     save_otp(payload.email, otp, otp_collection)
-
-#     print(f"OTP sent to {payload.email}: {otp}")  # Replace with real email logic
-#     return api_response("OTP sent successfully", 200)
-
-from fastapi import Request
 
 @router.post("/verify-otp")
 async def verify_otp(
