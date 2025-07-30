@@ -58,15 +58,22 @@ async def analyze_input(
         all_texts.append(image_text)
 
     if audio:
-        validate_file_extension(audio, ALLOWED_AUDIO_EXTENSIONS, "audio")
-        audio_bytes = await audio.read()
-        audio_text = extract_text_from_audio(audio_bytes)
+        audio_text = await extract_text_from_audio(audio)
         all_texts.append(audio_text)
 
     if not all_texts:
         return api_response("No input provided.",400)
 
     combined_text = " ".join(all_texts)
+
+    # word_count = len(combined_text.split())
+    # if word_count > 500:
+    #     return api_response(f"Input text too long. Limit is 500 words, received {word_count}.", 413)
+
+    # words = combined_text.split()
+    # if len(words) > 500:
+    #     combined_text = " ".join(words[:500])  # Limit to first 500 words
+    
     # print(combined_text)
     # Analysis logic
     sentiment = analyze_sentiment(combined_text)

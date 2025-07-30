@@ -20,7 +20,8 @@ def logout_user(response: Response):
 async def login_via_google(request: Request):
     # redirect_uri = request.url_for("google_auth_callback")
     try:
-        redirect_uri = "http://localhost:8000/api/auth/google/callback"
+        # redirect_uri = "http://localhost:8000/api/auth/google/callback"
+        redirect_uri = "https://divyanshi09-factify-ai-backend.hf.space/api/auth/google/callback"
         # print(f"Redirect URI: {redirect_uri} | Type: {type(redirect_uri)}")
         return await oauth.google.authorize_redirect(request, redirect_uri)
     except Exception as e:

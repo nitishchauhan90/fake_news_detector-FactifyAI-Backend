@@ -14,6 +14,14 @@ from PIL import Image
 import io
 import requests
 from bs4 import BeautifulSoup
+import whisper
+import tempfile
+from fastapi.responses import JSONResponse
+model = whisper.load_model("base")  # Load Whisper model only once
+
+ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".ogg"}
+MAX_FILE_SIZE_MB = 3 # Limit audio file size to 3 MB
+
 
 classifier = pipeline(
     "sentiment-analysis",
@@ -65,13 +73,35 @@ def extract_text_from_image(image_bytes: bytes) -> str:
 
     return cleaned_text.strip()
 
-def extract_text_from_audio(audio_bytes: bytes) -> str:
-    import speech_recognition as sr
-    import io
-    recognizer = sr.Recognizer()
-    with sr.AudioFile(io.BytesIO(audio_bytes)) as source:
-        audio = recognizer.record(source)
-    return recognizer.recognize_google(audio)
+async def extract_text_from_audio(file: UploadFile) -> dict:
+    filename = file.filename
+    extension = os.path.splitext(filename)[-1].lower()
+
+    if extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file format.")
+
+    # Check file size (limit to 5MB)
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds 5MB limit.")
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as temp_audio:
+            temp_audio.write(contents)
+            temp_audio.flush()
+            result = model.transcribe(temp_audio.name)
+            return result["text"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+
+
+# def extract_text_from_audio(audio_bytes: bytes) -> str:
+#     import speech_recognition as sr
+#     import io
+#     recognizer = sr.Recognizer()
+#     with sr.AudioFile(io.BytesIO(audio_bytes)) as source:
+#         audio = recognizer.record(source)
+#     return recognizer.recognize_google(audio)
 
 def analyze_sentiment(text: str) -> str:
     res = classifier(text)[0]  # returns {'label': 'NEGATIVE', 'score': 0.9987}
