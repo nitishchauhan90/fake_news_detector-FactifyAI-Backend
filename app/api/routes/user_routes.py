@@ -58,7 +58,10 @@ async def login_user(
     # print("Stored hash:", user.get("hashed_password"))
     # print("Verified:", verify_password(form_data.password, user.get("hashed_password")))
     
-    if not user or not verify_password(form_data.password, user.get("hashed_password")):
+    if not user :
+        return api_response("user not found",404)
+
+    if not verify_password(form_data.password, user.get("hashed_password")):
         return api_response("Invalid credentials",401)
     token = create_access_token({"sub": str(user["_id"])})
     response.set_cookie(

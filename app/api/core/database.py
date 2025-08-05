@@ -21,3 +21,9 @@ def get_contact_collection():
 def get_otp_collection():
     db = get_database()
     return db["otp_collection"]
+
+def get_ip_collection():
+    return db["ip_limits"]
+
+def get_feedback_collection():
+    return db["feedback_collection"]

@@ -65,10 +65,13 @@ async def analyze_input(
         return api_response("No input provided.",400)
 
     combined_text = " ".join(all_texts)
-
-    # word_count = len(combined_text.split())
-    # if word_count > 500:
-    #     return api_response(f"Input text too long. Limit is 500 words, received {word_count}.", 413)
+    if not combined_text:
+        return api_response("Check your input image or audio file formate.",403)
+    
+    word_count = len(combined_text.split())
+    
+    if word_count > 350:
+        return api_response(f"Input text too long. Limit is 350 words, received {word_count}.", 413)
 
     # words = combined_text.split()
     # if len(words) > 500:
@@ -101,6 +104,7 @@ async def analyze_input(
 
     return {
         "message": "Analysis completed",
+        "your_input":combined_text,
         "sentiment": sentiment,
         "authenticity": authenticity,
         "fact_check_result": fact_check_result,

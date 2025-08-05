@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from .api.routes import user_routes,profile_routes,user_input_data_routes,forgetpasswordroutes,contact_routes,auth_routes
+from .api.routes import user_routes,profile_routes,user_input_data_routes,forgetpasswordroutes,contact_routes,auth_routes,extension_routes,news_route
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from .api.config.config import SESSION_SECRET_KEY
@@ -9,7 +9,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000","http://localhost:3000","http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000","http://localhost:3000","http://127.0.0.1:3000", "phimpjahpalpjccdhelcfabofjnonjap","ekdjdgbankpiblgoblgpbjelnmblkbfp"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,8 +23,8 @@ app.include_router(user_input_data_routes.router)
 app.include_router(forgetpasswordroutes.router)
 app.include_router(contact_routes.router)
 app.include_router(auth_routes.router)
-
-
+app.include_router(extension_routes.router)
+app.include_router(news_route.router)
 
 
 @app.get('/',tags=['main'])

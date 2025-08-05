@@ -83,7 +83,7 @@ async def extract_text_from_audio(file: UploadFile) -> dict:
     # Check file size (limit to 5MB)
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File size exceeds 5MB limit.")
+        raise HTTPException(status_code=400, detail="File size exceeds 3MB limit.")
 
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as temp_audio:
